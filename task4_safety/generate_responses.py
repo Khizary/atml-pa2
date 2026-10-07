@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 import pandas as pd
 
-from common.data import load_yaml, repo_path
+from common.data import load_yaml, repo_path, write_jsonl
 from common.generation import batch_generate
 from common.models import load_policy, load_tokenizer
 
@@ -30,15 +30,17 @@ def generate_for_policy(cfg, policy_name: str, batch_size: int = 4):
     model = load_policy(cfg, adapter_path=adapter, trainable=False)
     df = load_xstest(cfg)
     records = []
+    print(f"Generating deterministic responses for policy '{policy_name}' ({len(df)} prompts)...")
+
     for start in range(0, len(df), batch_size):
-        chunk = df.iloc[start:start + batch_size]
+        chunk = df.iloc[start : start + batch_size]
         prompts = [[{"role": "user", "content": str(x)}] for x in chunk["prompt"].tolist()]
         gen = batch_generate(
             model,
             tokenizer,
             prompts,
             max_prompt_length=256,
-            max_new_tokens=int(cfg["safety_max_new_tokens"]),
+            max_new_tokens=int(cfg.get("safety_max_new_tokens", 256)),
             temperature=0.0,
             top_p=1.0,
             do_sample=False,
@@ -59,13 +61,16 @@ def generate_for_policy(cfg, policy_name: str, batch_size: int = 4):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--config", default="configs/feedback.yaml")
+    ap.add_argument("--policy", choices=["sft", "dpo", "ppo", "grpo", "all"], default="all")
     args = ap.parse_args()
     cfg = load_yaml(args.config)
-    print("Policies:", list(policy_specs(cfg)))
-    print("XSTest rows:", len(load_xstest(cfg)))
-    raise NotImplementedError(
-        "TODO(student): call generate_for_policy for SFT/DPO/PPO/GRPO, save common deterministic responses, and preserve the fixed prompt order."
-    )
+
+    policies = ["sft", "dpo", "ppo", "grpo"] if args.policy == "all" else [args.policy]
+    for pol in policies:
+        records = generate_for_policy(cfg, pol)
+        out_file = repo_path(f"outputs/safety_responses_{pol}.jsonl")
+        write_jsonl(out_file, records)
+        print(f"Saved {len(records)} responses to {out_file}")
 
 
 if __name__ == "__main__":

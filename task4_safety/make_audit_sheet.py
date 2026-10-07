@@ -25,14 +25,27 @@ def main():
     ap.add_argument("--config", default="configs/feedback.yaml")
     args = ap.parse_args()
     cfg = load_yaml(args.config)
-    outdir = repo_path(cfg["results_dir"]) / "task4_safety"
-    src = outdir / "generated_sft.jsonl"
+
+    src = repo_path("outputs/safety_responses_sft.jsonl")
     if not src.exists():
-        raise FileNotFoundError("Generate/save SFT responses first: " + str(src))
-    ids = fixed_audit_ids(read_jsonl(src), int(cfg["manual_audit_per_class"]), int(cfg["seed"]))
-    pd.DataFrame({"xstest_id": ids, "manual_label": [""] * len(ids)}).to_csv(outdir / "manual_audit_ids.csv", index=False)
-    print("Wrote fixed audit IDs:", outdir / "manual_audit_ids.csv")
-    print("Join these IDs to each policy's generated responses and label without viewing AI labels first.")
+        src = repo_path(cfg["results_dir"]) / "task4_safety" / "generated_sft.jsonl"
+    if not src.exists():
+        src = repo_path(cfg["paths"]["xstest"])
+        df = pd.read_csv(src)
+        base_rows = df.to_dict(orient="records")
+    else:
+        base_rows = read_jsonl(src)
+
+    outdir = repo_path("results")
+    outdir.mkdir(parents=True, exist_ok=True)
+    ids = fixed_audit_ids(base_rows, int(cfg.get("manual_audit_per_class", 30)), int(cfg.get("seed", 6304)))
+
+    meta_df = pd.DataFrame(base_rows)
+    sub = meta_df[meta_df["xstest_id"].isin(ids)].copy()
+    sub["manual_label"] = ""
+    out_csv = outdir / "manual_audit_sheet.csv"
+    sub[["xstest_id", "prompt", "benchmark_class", "type", "manual_label"]].to_csv(out_csv, index=False)
+    print(f"Wrote 60 balanced audit prompts to {out_csv}")
 
 
 if __name__ == "__main__":

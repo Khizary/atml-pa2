@@ -27,10 +27,9 @@ def dpo_loss(
         - ref_rejected_logp
     )
 
-    # Starter implementation:
-    # students must validate the objective carefully.
+    # Corrected Bradley-Terry DPO objective:
     logits = beta * (
-        policy_margin + ref_margin
+        policy_margin - ref_margin
     )
 
     loss = -F.logsigmoid(
