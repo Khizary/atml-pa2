@@ -118,13 +118,9 @@ def encode_prompt_response(
         add_generation_prompt=True,
     )
 
-    # A DPO example is meaningful only if we can condition on the prompt.
+    # A DPO example needs budget for the response. If prompt is too long, truncate prompt from left.
     if len(prompt_ids) >= max_length:
-        raise ValueError(
-            f"Prompt alone has {len(prompt_ids)} tokens, which does not fit "
-            f"inside max_length={max_length}. "
-            "Increase max_length or filter this example."
-        )
+        prompt_ids = prompt_ids[-(max_length - 32):]
 
     response_ids = tokenizer(
         response,

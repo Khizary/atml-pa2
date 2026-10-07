@@ -7,7 +7,7 @@ batch_size: 2
 grad_accum_steps: 8
 epochs: 1
 short_ablation_examples: 600
-max_sequence_length: 768
+max_sequence_length: 1024
 max_generation_tokens: 256
 max_grad_norm: 1.0
 standard_output: outputs/task1_dpo/standard
