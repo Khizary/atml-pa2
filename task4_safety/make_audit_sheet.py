@@ -43,8 +43,15 @@ def main():
     meta_df = pd.DataFrame(base_rows)
     sub = meta_df[meta_df["xstest_id"].isin(ids)].copy()
     sub["manual_label"] = ""
-    out_csv = outdir / "manual_audit_sheet.csv"
-    sub[["xstest_id", "prompt", "benchmark_class", "type", "manual_label"]].to_csv(out_csv, index=False)
+    cols = ["xstest_id"]
+    if "policy" in sub.columns:
+        cols.append("policy")
+    cols.append("prompt")
+    if "response" in sub.columns:
+        cols.append("response")
+    cols.extend(["benchmark_class", "type", "manual_label"])
+    out_cols = [c for c in cols if c in sub.columns]
+    sub[out_cols].to_csv(out_csv, index=False)
     print(f"Wrote 60 balanced audit prompts to {out_csv}")
 
 

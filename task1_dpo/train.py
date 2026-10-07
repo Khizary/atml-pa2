@@ -92,7 +92,7 @@ def run_training(config_path: str, run_name: str, dataset_path: str | None = Non
     output = repo_path(output_path or cfg.get("output", f"outputs/task1_dpo/{run_name}"))
     output.mkdir(parents=True, exist_ok=True)
 
-    grad_accum = int(cfg.get("gradient_accumulation_steps", 1))
+    grad_accum = int(cfg.get("grad_accum_steps", cfg.get("gradient_accumulation_steps", 1)))
     epochs = int(cfg.get("epochs", 1))
 
     if torch.cuda.is_available():

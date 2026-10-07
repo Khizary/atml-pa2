@@ -26,6 +26,9 @@ def generate_for_policy(cfg, policy_name: str, batch_size: int = 4):
     if policy_name not in specs:
         raise KeyError(policy_name)
     adapter = specs[policy_name]
+    if adapter and not repo_path(adapter).exists():
+        print(f"Skipping {policy_name}: adapter {adapter} not found")
+        return []
     tokenizer = load_tokenizer(cfg["base_model"])
     model = load_policy(cfg, adapter_path=adapter, trainable=False)
     df = load_xstest(cfg)
@@ -55,6 +58,10 @@ def generate_for_policy(cfg, policy_name: str, batch_size: int = 4):
                 "response": response,
                 "response_tokens": int(n_tok),
             })
+    del model
+    import gc; gc.collect()
+    import torch as _t
+    if _t.cuda.is_available(): _t.cuda.empty_cache()
     return records
 
 

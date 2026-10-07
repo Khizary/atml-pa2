@@ -59,9 +59,11 @@ class PairwiseAIJudge:
             )
             kwargs["device_map"] = "auto"
         else:
-            kwargs["dtype"] = resolve_dtype(cfg.get("dtype", "float16"))
+            kwargs["torch_dtype"] = resolve_dtype(cfg.get("dtype", "float16"))
 
         self.model = AutoModelForCausalLM.from_pretrained(cfg["ai_judge_model"], **kwargs)
+        if "device_map" not in kwargs and torch.cuda.is_available():
+            self.model = self.model.cuda()
         self.model.eval()
 
     def _key(self, problem, a, b):

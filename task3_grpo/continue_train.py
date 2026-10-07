@@ -100,7 +100,7 @@ def run_grpo(config_path: str, output: str | None = None, updates: int | None = 
         rmask = gen["response_mask"]
 
         # Reward scoring
-        rewards = score_rollouts(rm_model, rm_tok, batch_prompts, gen["responses"])
+        rewards = score_rollouts(rm_model, rm_tok, batch_prompts, gen["responses"]).to(seqs.device)
 
         # Informativeness check
         rew_std = float(rewards.std(unbiased=False).item())
@@ -110,8 +110,8 @@ def run_grpo(config_path: str, output: str | None = None, updates: int | None = 
         token_mask = mask_truncated_sequences(rmask, gen["truncated"]) if mask_trunc else rmask
 
         # Group advantages (all K belong to group 0)
-        group_ids = torch.zeros(K, dtype=torch.long, device=rewards.device)
-        seq_adv = group_relative_advantages(rewards, group_ids)
+        group_ids = torch.zeros(K, dtype=torch.long, device=seqs.device)
+        seq_adv = group_relative_advantages(rewards, group_ids).to(seqs.device)
 
         # Old and ref logprobs
         with torch.no_grad():

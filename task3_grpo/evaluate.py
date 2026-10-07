@@ -37,33 +37,37 @@ def evaluate_grpo(config_path: str, adapter: str, name: str = "standard", max_ex
     print(f"Evaluating GRPO policy '{name}' on {len(rows)} held-out prompts...")
     prompt_msgs = [prompt_messages(r) for r in rows]
 
-    gen = batch_generate(
-        policy,
-        tokenizer,
-        prompt_msgs,
-        max_prompt_length=int(cfg.get("max_prompt_length", 256)),
-        max_new_tokens=int(cfg.get("max_completion_length", 512)),
-        temperature=float(cfg.get("generation", {}).get("temperature", 0.7)),
-        top_p=float(cfg.get("generation", {}).get("top_p", 0.9)),
-        do_sample=True,
-    )
+    scores, kl_divs, lengths = [], [], []
+    batch_size = int(cfg.get("eval_batch_size", 4))
+    for i in range(0, len(prompt_msgs), batch_size):
+        chunk_msgs = prompt_msgs[i : i + batch_size]
+        gen = batch_generate(
+            policy,
+            tokenizer,
+            chunk_msgs,
+            max_prompt_length=int(cfg.get("max_prompt_length", 256)),
+            max_new_tokens=int(cfg.get("max_completion_length", 512)),
+            temperature=float(cfg.get("generation", {}).get("temperature", 0.7)),
+            top_p=float(cfg.get("generation", {}).get("top_p", 0.9)),
+            do_sample=True,
+        )
+        chunk_scores = score_rollouts(rm_model, rm_tok, chunk_msgs, gen["responses"]).tolist()
+        scores.extend(chunk_scores if isinstance(chunk_scores, list) else [chunk_scores])
 
-    scores = score_rollouts(rm_model, rm_tok, prompt_msgs, gen["responses"]).tolist()
-
-    with torch.no_grad():
-        pol_logp, _ = response_token_logprobs(policy, gen["sequences"], gen["attention_mask"], gen["prompt_width"], gen["response_ids"])
-        with reference_mode(policy):
-            ref_logp, _ = response_token_logprobs(policy, gen["sequences"], gen["attention_mask"], gen["prompt_width"], gen["response_ids"])
-        kl_div = sampled_kl(pol_logp, ref_logp, gen["response_mask"]).item()
-
-    lengths = gen["response_lengths"]
+        with torch.no_grad():
+            pol_logp, _ = response_token_logprobs(policy, gen["sequences"], gen["attention_mask"], gen["prompt_width"], gen["response_ids"])
+            with reference_mode(policy):
+                ref_logp, _ = response_token_logprobs(policy, gen["sequences"], gen["attention_mask"], gen["prompt_width"], gen["response_ids"])
+            kl_val = sampled_kl(pol_logp, ref_logp, gen["response_mask"]).item()
+            kl_divs.append(kl_val)
+        lengths.extend(gen["response_lengths"])
 
     results = {
         "policy_name": name,
         "eval_examples": len(rows),
         "mean_reward": round(float(np.mean(scores)), 4),
         "std_reward": round(float(np.std(scores)), 4),
-        "kl_divergence": round(float(kl_div), 4),
+        "kl_divergence": round(float(np.mean(kl_divs)), 4) if kl_divs else 0.0,
         "response_length_mean": round(float(np.mean(lengths)), 2),
         "response_length_std": round(float(np.std(lengths)), 2),
     }

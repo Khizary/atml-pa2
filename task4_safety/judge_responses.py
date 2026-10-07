@@ -39,7 +39,7 @@ def load_judge(cfg):
     if tok.pad_token is None:
         tok.pad_token = tok.eos_token
     dtype = resolve_dtype(cfg.get("dtype", "float16"))
-    model = AutoModelForCausalLM.from_pretrained(model_id, dtype=dtype, low_cpu_mem_usage=True)
+    model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=dtype, low_cpu_mem_usage=True)
     if torch.cuda.is_available():
         model = model.cuda()
     model.eval()
@@ -47,7 +47,7 @@ def load_judge(cfg):
 
 
 def parse_json(raw: str):
-    m = re.search(r"\{.*?\}", raw, re.DOTALL)
+    m = re.search(r"\{.*\}", raw, re.DOTALL)
     if not m:
         return {"label": "AMBIGUOUS", "confidence": 0.0, "rationale_tag": "no_json"}
     try:

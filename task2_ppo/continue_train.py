@@ -123,9 +123,12 @@ def run_ppo(config_path: str, output: str | None = None, updates: int | None = N
 
     for u in range(num_updates):
         # 1. Sample prompts
-        batch_slice = prompts[(u * prompts_per_update) % len(prompts) : ((u + 1) * prompts_per_update) % len(prompts)]
-        if not batch_slice:
-            batch_slice = [prompts[0]]
+        start_idx = (u * prompts_per_update) % len(prompts)
+        end_idx = start_idx + prompts_per_update
+        if end_idx <= len(prompts):
+            batch_slice = prompts[start_idx:end_idx]
+        else:
+            batch_slice = prompts[start_idx:] + prompts[: end_idx % len(prompts)]
         prompt_msgs = [prompt_messages(r) for r in batch_slice]
 
         # 2. Rollout
@@ -147,7 +150,7 @@ def run_ppo(config_path: str, output: str | None = None, updates: int | None = N
         rmask = gen["response_mask"]
 
         # 3. Reward scoring
-        task_rew = score_rollouts(rm_model, rm_tok, prompt_msgs, gen["responses"])
+        task_rew = score_rollouts(rm_model, rm_tok, prompt_msgs, gen["responses"]).to(seqs.device)
         # Apply missing EOS penalty if applicable
         if cfg.get("missing_eos_penalty"):
             for i, term in enumerate(gen["terminated_with_eos"]):

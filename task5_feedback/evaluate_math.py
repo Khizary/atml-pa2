@@ -66,6 +66,9 @@ def evaluate_dataset(config_path: str, dataset: str, max_examples: int | None = 
         )
         policy_responses[pol] = gen["responses"]
         del model
+        import gc; gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
 
     judge = PairwiseAIJudge(cfg, cache_path=f"cached/ai_judge_{dataset}.json")
 

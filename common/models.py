@@ -64,7 +64,7 @@ def load_policy(cfg: dict, adapter_path: str | None = None, trainable: bool = Fa
     dtype = resolve_dtype(cfg.get("dtype", "float16"))
     model = AutoModelForCausalLM.from_pretrained(
         cfg["base_model"],
-        dtype=dtype,
+        torch_dtype=dtype,
         low_cpu_mem_usage=True,
     )
     tok_for_config = load_tokenizer(cfg["base_model"])
@@ -133,7 +133,7 @@ def load_reward_model(cfg: dict):
     if qcfg is not None:
         kwargs.update({"quantization_config": qcfg, "device_map": "auto"})
     else:
-        kwargs["dtype"] = dtype
+        kwargs["torch_dtype"] = dtype
 
     model = AutoModelForSequenceClassification.from_pretrained(cfg["reward_model"], **kwargs)
     if qcfg is None and torch.cuda.is_available():
@@ -154,7 +154,7 @@ def load_value_model(cfg: dict, checkpoint: str, train_mode: str = "lora_head"):
     model = AutoModelForSequenceClassification.from_pretrained(
         str(repo_path(checkpoint)),
         num_labels=1,
-        dtype=dtype,
+        torch_dtype=dtype,
         low_cpu_mem_usage=True,
     )
     tok_for_config = load_tokenizer(cfg["base_model"])

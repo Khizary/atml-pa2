@@ -65,8 +65,8 @@ def main():
     }
 
     for pid, variants in groups.items():
-        prob = variants["clean_correct"]["question"]
-        gold = variants["clean_correct"]["gold_final"]
+        prob = str(variants["clean_correct"].get("question", variants["clean_correct"].get("prompt", "")))
+        gold = str(variants["clean_correct"].get("gold_final", ""))
 
         for better_var, worse_var, pair_name in contrast_pairs:
             resp_better = variants[better_var]["response"]

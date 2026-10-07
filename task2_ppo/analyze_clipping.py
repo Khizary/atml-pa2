@@ -34,8 +34,8 @@ def analyze_cached_batch(rows, epsilons):
     for eps in epsilons:
         clipped_fractions = []
         for r in rows:
-            old_lp = r["old_logprobs"]
-            ref_lp = r["ref_logprobs"]
+            old_lp = torch.as_tensor(r["old_logprobs"])
+            ref_lp = torch.as_tensor(r["ref_logprobs"])
             # approximate ratio between old and ref or synthetic ratio
             ratio = torch.exp(old_lp - ref_lp)
             affected = ((ratio < (1.0 - eps)) | (ratio > (1.0 + eps))).float()
