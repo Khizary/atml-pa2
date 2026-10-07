@@ -52,13 +52,14 @@ def batch_generate(
     if do_sample:
         kwargs.update({"temperature": temperature, "top_p": top_p})
 
-    with torch.inference_mode():
+    with torch.no_grad():
         seq = model.generate(**enc, **kwargs)
+    seq = seq.clone()
     if was_training:
         model.train()
 
     prompt_width = enc["input_ids"].shape[1]
-    response_ids = seq[:, prompt_width:]
+    response_ids = seq[:, prompt_width:].clone()
     rmask = _response_mask(response_ids, tokenizer.eos_token_id).to(seq.device)
     terminated, truncated, lengths, texts = [], [], [], []
     for row, mask in zip(response_ids, rmask):
