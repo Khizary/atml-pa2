@@ -64,7 +64,7 @@ def load_policy(cfg: dict, adapter_path: str | None = None, trainable: bool = Fa
     dtype = resolve_dtype(cfg.get("dtype", "float16"))
     model = AutoModelForCausalLM.from_pretrained(
         cfg["base_model"],
-        torch_dtype=dtype,
+        dtype=dtype,
         low_cpu_mem_usage=True,
     )
     tok_for_config = load_tokenizer(cfg["base_model"])
@@ -133,7 +133,7 @@ def load_reward_model(cfg: dict):
     if qcfg is not None:
         kwargs.update({"quantization_config": qcfg, "device_map": "auto"})
     else:
-        kwargs["torch_dtype"] = dtype
+        kwargs["dtype"] = dtype
 
     model = AutoModelForSequenceClassification.from_pretrained(cfg["reward_model"], **kwargs)
     if qcfg is None and torch.cuda.is_available():
@@ -154,7 +154,7 @@ def load_value_model(cfg: dict, checkpoint: str, train_mode: str = "lora_head"):
     model = AutoModelForSequenceClassification.from_pretrained(
         str(repo_path(checkpoint)),
         num_labels=1,
-        torch_dtype=dtype,
+        dtype=dtype,
         low_cpu_mem_usage=True,
     )
     tok_for_config = load_tokenizer(cfg["base_model"])
@@ -180,6 +180,11 @@ def load_value_model(cfg: dict, checkpoint: str, train_mode: str = "lora_head"):
         pass
     else:
         raise ValueError(f"Unknown value train_mode={train_mode!r}")
+
+    # trainable critic params (lora + score copy) stay fp32, adam on fp16 params nans out fast
+    for p in model.parameters():
+        if p.requires_grad:
+            p.data = p.data.float()
 
     if torch.cuda.is_available():
         model = model.cuda()
@@ -228,7 +233,17 @@ def token_values(value_model, input_ids, attention_mask):
         head = value_model.classifier
     else:
         raise RuntimeError("Could not locate scalar value head")
-    return head(hidden).squeeze(-1)
+    params = list(head.parameters())
+    head_dtype = next((p.dtype for p in params if p.requires_grad), params[0].dtype)
+    return head(hidden.to(head_dtype)).squeeze(-1).float()
+
+
+def disable_dropout(model):
+    """Zero all dropout (lora_dropout included) so pi_old/pi_new logprobs aren't noisy in RL loops."""
+    for m in model.modules():
+        if isinstance(m, torch.nn.Dropout):
+            m.p = 0.0
+    return model
 
 
 def trainable_parameters(model):

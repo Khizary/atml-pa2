@@ -31,6 +31,9 @@ def batch_generate(
         tokenizer.apply_chat_template(p, tokenize=False, add_generation_prompt=True)
         for p in prompts
     ]
+    # cut long prompts from the left so the assistant header at the end survives
+    old_side = tokenizer.truncation_side
+    tokenizer.truncation_side = "left"
     enc = tokenizer(
         rendered,
         return_tensors="pt",
@@ -38,6 +41,7 @@ def batch_generate(
         truncation=True,
         max_length=max_prompt_length,
     )
+    tokenizer.truncation_side = old_side
     device = next(model.parameters()).device
     enc = {k: v.to(device) for k, v in enc.items()}
 

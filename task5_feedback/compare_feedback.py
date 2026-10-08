@@ -5,57 +5,54 @@ import json
 from common.data import load_yaml, repo_path
 
 
+def load(path):
+    return json.loads(path.read_text()) if path.exists() else {}
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--config", default="configs/feedback.yaml")
     args = ap.parse_args()
     cfg = load_yaml(args.config)
+    outdir = repo_path(cfg["results_dir"]) / "task5_feedback"
 
-    gsm_file = repo_path("results/feedback_gsm_eval.json")
-    trans_file = repo_path("results/feedback_transfer_eval.json")
-    diag_file = repo_path("results/feedback_diagnostics.json")
-
+    gsm = load(outdir / "gsm_eval.json")
+    trans = load(outdir / "transfer_eval.json")
     summary = {
-        "in_domain_gsm8k": {},
-        "out_of_domain_transfer": {},
-        "diagnostics": {},
+        "in_domain_gsm8k": gsm,
+        "out_of_domain_transfer": trans,
+        "diagnostics": load(outdir / "diagnostics.json"),
         "transfer_drop": {},
     }
 
-    if gsm_file.exists():
-        with open(gsm_file) as f:
-            summary["in_domain_gsm8k"] = json.load(f)
-
-    if trans_file.exists():
-        with open(trans_file) as f:
-            summary["out_of_domain_transfer"] = json.load(f)
-
-    if diag_file.exists():
-        with open(diag_file) as f:
-            summary["diagnostics"] = json.load(f)
-
-    # Compute transfer drop if both are present
-    if "policies" in summary["in_domain_gsm8k"] and "policies" in summary["out_of_domain_transfer"]:
+    if gsm and trans:
         for pol in ["sft", "rlvr", "rlaif"]:
-            gsm_acc = summary["in_domain_gsm8k"]["policies"].get(pol, {}).get("exact_accuracy", 0.0)
-            trans_acc = summary["out_of_domain_transfer"]["policies"].get(pol, {}).get("exact_accuracy", 0.0)
-            drop = gsm_acc - trans_acc
-            summary["transfer_drop"][pol] = {
-                "gsm_acc": gsm_acc,
-                "transfer_acc": trans_acc,
-                "accuracy_drop": round(drop, 4),
+            g, t = gsm["policies"][pol], trans["policies"][pol]
+            row = {
+                "gsm_acc": g["exact_accuracy"],
+                "transfer_acc": t["exact_accuracy"],
+                "accuracy_drop": round(g["exact_accuracy"] - t["exact_accuracy"], 4),
+                "gsm_format": g["format_compliance_rate"],
+                "transfer_format": t["format_compliance_rate"],
+                "gsm_tokens": g["response_tokens_mean"],
+                "transfer_tokens": t["response_tokens_mean"],
+                "transfer_failure_types": t["failure_types"],
             }
+            key = f"{pol}_vs_sft"
+            if key in gsm.get("pairwise", {}) and key in trans.get("pairwise", {}):
+                row["gsm_win_rate_vs_sft"] = gsm["pairwise"][key]["win_rate"]
+                row["transfer_win_rate_vs_sft"] = trans["pairwise"][key]["win_rate"]
+                row["win_rate_drop"] = round(row["gsm_win_rate_vs_sft"] - row["transfer_win_rate_vs_sft"], 4)
+            summary["transfer_drop"][pol] = row
 
-    out_file = repo_path("results/feedback_synthesis.json")
+    out_file = outdir / "feedback_synthesis.json"
     out_file.parent.mkdir(parents=True, exist_ok=True)
     with open(out_file, "w") as f:
         json.dump(summary, f, indent=2)
 
     print(f"\nFeedback synthesis complete. Saved to {out_file}")
-    if summary["transfer_drop"]:
-        print("Transfer performance drop (GSM8K -> SVAMP):")
-        for pol, d in summary["transfer_drop"].items():
-            print(f"  {pol.upper()}: {d['gsm_acc']:.3f} -> {d['transfer_acc']:.3f} (drop: {d['accuracy_drop']:.3f})")
+    for pol, d in summary["transfer_drop"].items():
+        print(f"  {pol.upper()}: acc {d['gsm_acc']:.3f} -> {d['transfer_acc']:.3f} (drop {d['accuracy_drop']:.3f})")
 
 
 if __name__ == "__main__":

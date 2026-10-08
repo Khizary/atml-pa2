@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import argparse
 import json
-from collections import defaultdict
+from collections import Counter, defaultdict
 import numpy as np
 
-from common.data import load_yaml, read_jsonl, repo_path
+from common.data import load_yaml, read_jsonl, repo_path, write_jsonl
 from task5_feedback.rlvr import exact_reward
 from task5_feedback.rlaif import PairwiseAIJudge
 
@@ -49,73 +49,71 @@ def main():
     groups = load_diagnostic_groups(cfg["paths"]["task5_diagnostics"])
     print(f"Loaded {len(groups)} diagnostic problems with all 5 variants.")
 
-    judge = PairwiseAIJudge(cfg, cache_path="cached/ai_judge_diagnostics.json")
+    outdir = repo_path(cfg["results_dir"]) / "task5_feedback"
+    outdir.mkdir(parents=True, exist_ok=True)
+    judge = PairwiseAIJudge(cfg, cache_path=outdir / "judge_cache_diagnostics.json")
 
-    # We evaluate pairs: (better_variant, worse_variant)
+    # (diagnostically better, worse, name). clean_correct is the better side of every pair.
     contrast_pairs = [
         ("clean_correct", "corrupt_reasoning_correct_final", "reasoning_corruption"),
         ("clean_correct", "good_reasoning_wrong_final", "outcome_error"),
         ("clean_correct", "persuasive_filler_correct", "persuasive_filler"),
-        ("clean_correct", "gold_distractor_wrong_final", "distractor_error"),
+        ("clean_correct", "gold_distractor_wrong_final", "gold_distractor"),
     ]
-
-    analysis = {
-        "verifier": defaultdict(lambda: {"better": 0, "tie": 0, "worse": 0}),
-        "ai_judge": defaultdict(lambda: {"better": 0, "tie": 0, "worse": 0}),
-    }
+    counts = {m: defaultdict(Counter) for m in ["verifier", "ai_judge"]}
+    pair_records = []
+    variant_scores = {m: defaultdict(list) for m in ["verifier", "ai_judge_group_winrate"]}
 
     for pid, variants in groups.items():
-        prob = str(variants["clean_correct"].get("question", variants["clean_correct"].get("prompt", "")))
-        gold = str(variants["clean_correct"].get("gold_final", ""))
-
+        prob = str(variants["clean_correct"]["question"])
+        gold = str(variants["clean_correct"]["gold_final"])
         for better_var, worse_var, pair_name in contrast_pairs:
             resp_better = variants[better_var]["response"]
             resp_worse = variants[worse_var]["response"]
+            prefs = {
+                "verifier": compare_pair_verifier(gold, resp_better, resp_worse),
+                "ai_judge": judge.compare(prob, resp_better, resp_worse),
+            }
+            for mech, pref in prefs.items():
+                counts[mech][pair_name][{"A": "better", "B": "worse", "TIE": "tie"}[pref]] += 1
+            pair_records.append({"problem_id": pid, "pair": pair_name, **{f"{m}_pref": v for m, v in prefs.items()}})
 
-            # Verifier comparison
-            v_pref = compare_pair_verifier(gold, resp_better, resp_worse)
-            if v_pref == "A":
-                analysis["verifier"][pair_name]["better"] += 1
-            elif v_pref == "TIE":
-                analysis["verifier"][pair_name]["tie"] += 1
-            else:
-                analysis["verifier"][pair_name]["worse"] += 1
-
-            # AI judge comparison
-            j_pref = judge.compare(prob, resp_better, resp_worse)
-            if j_pref == "A":
-                analysis["ai_judge"][pair_name]["better"] += 1
-            elif j_pref == "TIE":
-                analysis["ai_judge"][pair_name]["tie"] += 1
-            else:
-                analysis["ai_judge"][pair_name]["worse"] += 1
+        # rewards each mechanism would hand out if all five variants were one sampled group
+        names = sorted(EXPECTED_VARIANTS)
+        group = judge.group_rewards(prob, [variants[v]["response"] for v in names])
+        for v, g in zip(names, group):
+            variant_scores["ai_judge_group_winrate"][v].append(g)
+            variant_scores["verifier"][v].append(exact_reward(variants[v]["response"], gold))
 
     total_probs = len(groups)
-    results = {}
-    for mechanism in ["verifier", "ai_judge"]:
-        results[mechanism] = {}
-        for pair_name, counts in analysis[mechanism].items():
-            results[mechanism][pair_name] = {
-                "better_rate": round(counts["better"] / total_probs, 4),
-                "tie_rate": round(counts["tie"] / total_probs, 4),
-                "wrong_preference_rate": round(counts["worse"] / total_probs, 4),
+    results = {"num_problems": total_probs}
+    for mech in ["verifier", "ai_judge"]:
+        results[mech] = {}
+        for _, _, pair_name in contrast_pairs:
+            c = counts[mech][pair_name]
+            results[mech][pair_name] = {
+                "better_rate": round(c["better"] / total_probs, 4),
+                "tie_rate": round(c["tie"] / total_probs, 4),
+                "wrong_preference_rate": round(c["worse"] / total_probs, 4),
             }
-
-        # Specific Sensitivity metrics
-        results[mechanism]["S_reason"] = results[mechanism]["reasoning_corruption"]["better_rate"]
-        results[mechanism]["S_outcome"] = results[mechanism]["outcome_error"]["better_rate"]
+        # S_reason: final answer held correct, reasoning degraded. S_outcome: reasoning held, final changed.
+        results[mech]["S_reason"] = results[mech]["reasoning_corruption"]["better_rate"]
+        results[mech]["S_outcome"] = results[mech]["outcome_error"]["better_rate"]
+    results["mean_reward_per_variant"] = {
+        m: {v: round(float(np.mean(x)), 4) for v, x in d.items()} for m, d in variant_scores.items()
+    }
 
     print("\n=== Perturbation Diagnostics Summary ===")
-    print("Exact Verifier:")
-    print(f"  S_reason: {results['verifier']['S_reason']:.3f} | S_outcome: {results['verifier']['S_outcome']:.3f}")
-    print("AI Pairwise Judge:")
-    print(f"  S_reason: {results['ai_judge']['S_reason']:.3f} | S_outcome: {results['ai_judge']['S_outcome']:.3f}")
+    for mech in ["verifier", "ai_judge"]:
+        print(f"{mech}: S_reason={results[mech]['S_reason']:.3f} S_outcome={results[mech]['S_outcome']:.3f}")
+        for _, _, pair_name in contrast_pairs:
+            print(f"   {pair_name}: {results[mech][pair_name]}")
+    print("mean reward per variant:", json.dumps(results["mean_reward_per_variant"], indent=1))
 
-    out_file = repo_path("results/feedback_diagnostics.json")
-    out_file.parent.mkdir(parents=True, exist_ok=True)
+    out_file = outdir / "diagnostics.json"
     with open(out_file, "w") as f:
         json.dump(results, f, indent=2)
-
+    write_jsonl(outdir / "diagnostics_pairs.jsonl", pair_records)
     print(f"\nSaved diagnostic results to {out_file}")
 
 

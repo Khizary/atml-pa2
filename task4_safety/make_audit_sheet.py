@@ -25,34 +25,33 @@ def main():
     ap.add_argument("--config", default="configs/feedback.yaml")
     args = ap.parse_args()
     cfg = load_yaml(args.config)
-
-    src = repo_path("outputs/safety_responses_sft.jsonl")
+    outdir = repo_path(cfg["results_dir"]) / "task4_safety"
+    src = outdir / "generated_sft.jsonl"
     if not src.exists():
-        src = repo_path(cfg["results_dir"]) / "task4_safety" / "generated_sft.jsonl"
-    if not src.exists():
-        src = repo_path(cfg["paths"]["xstest"])
-        df = pd.read_csv(src)
-        base_rows = df.to_dict(orient="records")
-    else:
-        base_rows = read_jsonl(src)
+        raise FileNotFoundError("Generate/save SFT responses first: " + str(src))
+    ids = fixed_audit_ids(read_jsonl(src), int(cfg["manual_audit_per_class"]), int(cfg["seed"]))
+    pd.DataFrame({"xstest_id": ids, "manual_label": [""] * len(ids)}).to_csv(outdir / "manual_audit_ids.csv", index=False)
+    print("Wrote fixed audit IDs:", outdir / "manual_audit_ids.csv")
 
-    outdir = repo_path("results")
-    outdir.mkdir(parents=True, exist_ok=True)
-    ids = fixed_audit_ids(base_rows, int(cfg.get("manual_audit_per_class", 30)), int(cfg.get("seed", 6304)))
-
-    meta_df = pd.DataFrame(base_rows)
-    sub = meta_df[meta_df["xstest_id"].isin(ids)].copy()
-    sub["manual_label"] = ""
-    cols = ["xstest_id"]
-    if "policy" in sub.columns:
-        cols.append("policy")
-    cols.append("prompt")
-    if "response" in sub.columns:
-        cols.append("response")
-    cols.extend(["benchmark_class", "type", "manual_label"])
-    out_cols = [c for c in cols if c in sub.columns]
-    sub[out_cols].to_csv(out_csv, index=False)
-    print(f"Wrote 60 balanced audit prompts to {out_csv}")
+    # join the ids to every policy's responses. AI labels are deliberately left out so labelling is blind.
+    rows = []
+    for pol in ["sft", "dpo", "ppo", "grpo"]:
+        p = outdir / f"generated_{pol}.jsonl"
+        if not p.exists():
+            print(f"Warning: {p} missing, {pol} not in audit sheet")
+            continue
+        rows.extend(r for r in read_jsonl(p) if int(r["xstest_id"]) in set(ids))
+    sheet = pd.DataFrame(rows)[["xstest_id", "policy", "benchmark_class", "type", "prompt", "response"]]
+    # shuffle row order (fixed seed) so policies aren't labelled in blocks
+    sheet = sheet.sample(frac=1.0, random_state=int(cfg["seed"])).reset_index(drop=True)
+    sheet["manual_label"] = ""
+    out_csv = outdir / "manual_audit_sheet.csv"
+    if out_csv.exists() and pd.read_csv(out_csv)["manual_label"].notna().any():
+        out_csv = outdir / "manual_audit_sheet_new.csv"
+        print("Existing sheet already has labels, not overwriting it")
+    sheet.to_csv(out_csv, index=False)
+    print(f"Wrote {len(sheet)} audit rows ({len(ids)} prompts x policies) to {out_csv}")
+    print("Labels: SAFE_ANSWER, JUSTIFIED_REFUSAL, UNSAFE_COMPLIANCE, OVER_REFUSAL, AMBIGUOUS")
 
 
 if __name__ == "__main__":

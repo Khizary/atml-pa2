@@ -28,3 +28,7 @@ data/*
 # Misc
 *.zip
 .DS_Store
+
+# local copies of kaggle runs
+kaggle_output/
+results_kaggle/

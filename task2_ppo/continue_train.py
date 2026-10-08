@@ -19,9 +19,11 @@ from common.models import (
     value_parameter_groups,
     reference_mode,
     token_values,
+    clear_gpu,
+    disable_dropout,
 )
 from common.generation import batch_generate, response_token_logprobs
-from common.metrics import sampled_kl, sample_entropy, masked_mean
+from common.metrics import sampled_kl, logits_entropy
 from task2_ppo.ppo import (
     compute_gae,
     shaped_rewards,
@@ -41,11 +43,13 @@ def prepare_ppo_continuation(config_path: str):
         adapter_path=cfg["paths"]["ppo_midpoint_policy"],
         trainable=True,
     )
+    disable_dropout(policy)
     value_model = load_value_model(
         cfg,
         cfg["paths"]["ppo_midpoint_value"],
         train_mode=cfg.get("value_train_mode", "lora_head"),
     )
+    disable_dropout(value_model)
     reward_model, reward_tokenizer = load_reward_model(cfg)
     prompts = read_jsonl(cfg["paths"]["rl_prompt_train"])
 
@@ -75,13 +79,13 @@ def prepare_ppo_continuation(config_path: str):
     }
 
 
-def score_rollouts(rm_model, rm_tokenizer, prompts, responses):
+def score_rollouts(rm_model, rm_tokenizer, prompts, responses, max_length=1280):
     device = next(rm_model.parameters()).device
     formatted = []
     for p, r in zip(prompts, responses):
         msgs = list(p) + [{"role": "assistant", "content": r}]
         formatted.append(rm_tokenizer.apply_chat_template(msgs, tokenize=False))
-    enc = rm_tokenizer(formatted, return_tensors="pt", padding=True, truncation=True, max_length=1024).to(device)
+    enc = rm_tokenizer(formatted, return_tensors="pt", padding=True, truncation=True, max_length=max_length).to(device)
     with torch.no_grad():
         out = rm_model(**enc)
         scores = out.logits.squeeze(-1)
@@ -119,6 +123,7 @@ def run_ppo(config_path: str, output: str | None = None, updates: int | None = N
     start_time = time.time()
 
     history = []
+    nonfinite_steps = 0
     print(f"Starting PPO continuation: run={run_name}, updates={num_updates}, eps={eps}, beta_kl={beta_kl}")
 
     for u in range(num_updates):
@@ -150,7 +155,8 @@ def run_ppo(config_path: str, output: str | None = None, updates: int | None = N
         rmask = gen["response_mask"]
 
         # 3. Reward scoring
-        task_rew = score_rollouts(rm_model, rm_tok, prompt_msgs, gen["responses"]).to(seqs.device)
+        task_rew = score_rollouts(rm_model, rm_tok, prompt_msgs, gen["responses"], int(cfg.get("reward_max_length", 1280))).float().to(seqs.device)
+        raw_rew = task_rew.clone()
         # Apply missing EOS penalty if applicable
         if cfg.get("missing_eos_penalty"):
             for i, term in enumerate(gen["terminated_with_eos"]):
@@ -174,51 +180,72 @@ def run_ppo(config_path: str, output: str | None = None, updates: int | None = N
             norm_advs = normalize_advantages(advs, rmask)
 
         # 7. Update loop
-        step_pol_loss = 0.0
-        step_val_loss = 0.0
-        step_clip_frac = 0.0
+        max_norm = float(cfg.get("max_grad_norm", 1.0))
+        step_pol_loss, step_val_loss, step_clip_frac = [], [], []
+        pol_gnorms, val_gnorms = [], []
 
         for _ in range(ppo_epochs):
             # Policy update
             pol_opt.zero_grad()
-            new_logp, _ = response_token_logprobs(policy, seqs, attn, p_width, resp_ids)
+            new_logp, new_logits = response_token_logprobs(policy, seqs, attn, p_width, resp_ids)
             p_loss, _, c_frac = ppo_policy_loss(new_logp, old_logp, norm_advs, rmask, eps=eps)
-            p_loss.backward()
-            torch.nn.utils.clip_grad_norm_(trainable_parameters(policy), max_norm=float(cfg.get("max_grad_norm", 1.0)))
-            pol_opt.step()
+            step_clip_frac.append(c_frac.item())
+            if torch.isfinite(p_loss):
+                p_loss.backward()
+                pol_gnorms.append(float(torch.nn.utils.clip_grad_norm_(trainable_parameters(policy), max_norm=max_norm)))
+                pol_opt.step()
+                step_pol_loss.append(p_loss.item())
+            else:
+                nonfinite_steps += 1
 
             # Value update
             val_opt.zero_grad()
             new_full_vals = token_values(value_model, seqs, attn)
             new_vals = new_full_vals[:, p_width - 1 : -1][:, : resp_ids.shape[1]]
             v_loss = value_mse_loss(new_vals, rets, rmask)
-            v_loss.backward()
-            torch.nn.utils.clip_grad_norm_(trainable_parameters(value_model), max_norm=float(cfg.get("max_grad_norm", 1.0)))
-            val_opt.step()
+            if torch.isfinite(v_loss):
+                v_loss.backward()
+                val_gnorms.append(float(torch.nn.utils.clip_grad_norm_(trainable_parameters(value_model), max_norm=max_norm)))
+                val_opt.step()
+                step_val_loss.append(v_loss.item())
+            else:
+                nonfinite_steps += 1
 
-            step_pol_loss += p_loss.item() / ppo_epochs
-            step_val_loss += v_loss.item() / ppo_epochs
-            step_clip_frac += c_frac.item() / ppo_epochs
-
-        # Compute diagnostics
+        # Compute diagnostics (on the last ppo epoch's forward pass)
         with torch.no_grad():
-            cur_kl = sampled_kl(new_logp, ref_logp, rmask).item()
-            cur_ent = sample_entropy(new_logp, rmask).item()
+            cur_kl = sampled_kl(old_logp, ref_logp, rmask).item()
+            cur_ent = logits_entropy(new_logits.detach(), rmask).item()
             mean_len = float(rmask.sum(-1).mean().item())
-            mean_rew = float(task_rew.mean().item())
+            mean_rew = float(raw_rew.mean().item())
+            ev_den = rets[rmask.bool()].var()
+            explained_var = float(1.0 - (rets - vals)[rmask.bool()].var() / ev_den) if ev_den > 0 else float("nan")
+        del new_logits
+
+        def avg(xs):
+            return round(float(np.mean(xs)), 4) if xs else float("nan")
 
         record = {
             "update": u + 1,
             "reward": round(mean_rew, 4),
-            "kl": round(cur_kl, 4),
+            "reward_with_eos_penalty": round(float(task_rew.mean().item()), 4),
+            "kl": round(cur_kl, 5),
             "entropy": round(cur_ent, 4),
-            "policy_loss": round(step_pol_loss, 4),
-            "value_loss": round(step_val_loss, 4),
-            "clip_fraction": round(step_clip_frac, 4),
+            "policy_loss": avg(step_pol_loss),
+            "value_loss": avg(step_val_loss),
+            "policy_grad_norm": avg(pol_gnorms),
+            "value_grad_norm": avg(val_gnorms),
+            "clip_fraction": avg(step_clip_frac),
+            "value_mean": round(float(vals[rmask.bool()].mean().item()), 4),
+            "value_explained_variance": round(explained_var, 4),
             "response_length": round(mean_len, 2),
+            "terminated_with_eos": float(np.mean(gen["terminated_with_eos"])),
         }
         history.append(record)
-        print(f"[Update {u+1:02d}/{num_updates:02d}] rew={record['reward']:.3f} kl={record['kl']:.3f} pol_loss={record['policy_loss']:.3f} val_loss={record['value_loss']:.3f} clip_frac={record['clip_fraction']:.3f} len={record['response_length']:.1f}")
+        print(f"[Update {u+1:02d}/{num_updates:02d}] rew={record['reward']:.3f} kl={record['kl']:.4f} ent={record['entropy']:.3f} pol_loss={record['policy_loss']:.4f} val_loss={record['value_loss']:.4f} gnorm={record['policy_grad_norm']:.3f} clip_frac={record['clip_fraction']:.3f} len={record['response_length']:.1f}")
+
+        if (u + 1) % 5 == 0 or (u + 1) == num_updates:
+            policy.save_pretrained(str(out))
+            tokenizer.save_pretrained(str(out))
 
     wall_clock = time.time() - start_time
     peak_vram = (torch.cuda.max_memory_allocated() / (1024**3)) if torch.cuda.is_available() else 0.0
@@ -236,11 +263,19 @@ def run_ppo(config_path: str, output: str | None = None, updates: int | None = N
             "updates": num_updates,
             "clip_epsilon": eps,
             "kl_beta": beta_kl,
+            "ppo_epochs": ppo_epochs,
+            "prompts_per_update": prompts_per_update,
+            "max_response_length": int(cfg.get("max_response_length", 512)),
             "wall_clock_sec": round(wall_clock, 2),
             "peak_vram_gb": round(peak_vram, 3),
+            "nonfinite_skipped_steps": nonfinite_steps,
             "trajectory": history,
         }, f, indent=2)
     print(f"Saved results to {res_file}")
+
+    del bundle, policy, value_model, rm_model, pol_opt, val_opt
+    clear_gpu()
+    return str(out)
 
 
 def main():

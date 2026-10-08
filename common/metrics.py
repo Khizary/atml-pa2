@@ -18,6 +18,16 @@ def sample_entropy(sampled_logp: torch.Tensor, mask: torch.Tensor):
     return -masked_mean(sampled_logp, mask)
 
 
+@torch.no_grad()
+def logits_entropy(logits: torch.Tensor, mask: torch.Tensor):
+    """Mean token-level policy entropy over valid response tokens (row by row to save memory)."""
+    ents = []
+    for i in range(logits.shape[0]):
+        lp = torch.log_softmax(logits[i].float(), dim=-1)
+        ents.append(-(lp.exp() * lp).sum(-1))
+    return masked_mean(torch.stack(ents), mask.float())
+
+
 def mean_response_length(mask: torch.Tensor):
     return float(mask.sum(-1).float().mean().item())
 

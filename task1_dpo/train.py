@@ -19,7 +19,7 @@ from common.data import (
     repo_path,
 )
 from common.logging_utils import set_seed
-from common.models import load_policy, load_tokenizer, trainable_parameters, reference_mode
+from common.models import load_policy, load_tokenizer, trainable_parameters, reference_mode, clear_gpu
 from task1_dpo.dpo import dpo_loss
 
 
@@ -166,6 +166,11 @@ def run_training(config_path: str, run_name: str, dataset_path: str | None = Non
         json.dump({
             "run_name": run_name,
             "beta": dpo_beta,
+            "num_examples": len(bundle["rows"]),
+            "dataset": str(dataset_path or cfg["paths"]["dpo_standard_train"]),
+            "learning_rate": float(cfg["learning_rate"]),
+            "batch_size": int(cfg["batch_size"]),
+            "grad_accum_steps": grad_accum,
             "steps": step,
             "wall_clock_sec": round(wall_clock, 2),
             "peak_vram_gb": round(peak_vram_gb, 3),
@@ -173,6 +178,9 @@ def run_training(config_path: str, run_name: str, dataset_path: str | None = Non
         }, f, indent=2)
 
     print(f"Saved checkpoint to {output}")
+
+    del model, optimizer, bundle
+    clear_gpu()
 
 
 def main():

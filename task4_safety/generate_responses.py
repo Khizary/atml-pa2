@@ -21,14 +21,16 @@ def load_xstest(cfg):
     return pd.read_csv(repo_path(cfg["paths"]["xstest"]))
 
 
-def generate_for_policy(cfg, policy_name: str, batch_size: int = 4):
+def generate_for_policy(cfg, policy_name: str, batch_size: int = 16):
     specs = policy_specs(cfg)
     if policy_name not in specs:
         raise KeyError(policy_name)
     adapter = specs[policy_name]
-    if adapter and not repo_path(adapter).exists():
-        print(f"Skipping {policy_name}: adapter {adapter} not found")
-        return []
+    if adapter:
+        adapter_p = repo_path(adapter)
+        if not adapter_p.exists() or not (adapter_p / "adapter_config.json").exists():
+            print(f"Skipping {policy_name}: adapter {adapter} not found or missing adapter_config.json")
+            return []
     tokenizer = load_tokenizer(cfg["base_model"])
     model = load_policy(cfg, adapter_path=adapter, trainable=False)
     df = load_xstest(cfg)
@@ -73,11 +75,18 @@ def main():
     cfg = load_yaml(args.config)
 
     policies = ["sft", "dpo", "ppo", "grpo"] if args.policy == "all" else [args.policy]
+    failed = []
     for pol in policies:
         records = generate_for_policy(cfg, pol)
-        out_file = repo_path(f"outputs/safety_responses_{pol}.jsonl")
+        if not records:
+            failed.append(pol)
+            continue
+        out_file = repo_path(cfg["results_dir"]) / "task4_safety" / f"generated_{pol}.jsonl"
         write_jsonl(out_file, records)
         print(f"Saved {len(records)} responses to {out_file}")
+    if failed:
+        # the four task-4 policies are fixed; a missing one is an error, not something to skip quietly
+        raise SystemExit(f"Missing standard adapters for {failed}")
 
 
 if __name__ == "__main__":

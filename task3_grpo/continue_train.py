@@ -16,8 +16,11 @@ from common.models import (
     load_tokenizer,
     trainable_parameters,
     reference_mode,
+    clear_gpu,
+    disable_dropout,
 )
 from common.generation import batch_generate, response_token_logprobs
+from common.metrics import sampled_kl, logits_entropy
 from task2_ppo.continue_train import score_rollouts
 from task3_grpo.grpo import (
     group_relative_advantages,
@@ -35,6 +38,7 @@ def prepare_grpo_continuation(config_path: str):
         adapter_path=cfg["paths"]["grpo_midpoint_policy"],
         trainable=True,
     )
+    disable_dropout(policy)
     reward_model, reward_tokenizer = load_reward_model(cfg)
     prompts = read_jsonl(cfg["paths"]["rl_prompt_train"])
     optimizer = AdamW(trainable_parameters(policy), lr=float(cfg["learning_rate"]))
@@ -100,7 +104,7 @@ def run_grpo(config_path: str, output: str | None = None, updates: int | None = 
         rmask = gen["response_mask"]
 
         # Reward scoring
-        rewards = score_rollouts(rm_model, rm_tok, batch_prompts, gen["responses"]).to(seqs.device)
+        rewards = score_rollouts(rm_model, rm_tok, batch_prompts, gen["responses"], int(cfg.get("reward_max_length", 1280))).float().to(seqs.device)
 
         # Informativeness check
         rew_std = float(rewards.std(unbiased=False).item())
@@ -121,7 +125,7 @@ def run_grpo(config_path: str, output: str | None = None, updates: int | None = 
 
         # Optimization step
         optimizer.zero_grad()
-        new_logp, _ = response_token_logprobs(policy, seqs, attn, p_width, resp_ids)
+        new_logp, new_logits = response_token_logprobs(policy, seqs, attn, p_width, resp_ids)
         loss, diags = grpo_policy_loss(
             new_logp,
             old_logp,
@@ -134,22 +138,43 @@ def run_grpo(config_path: str, output: str | None = None, updates: int | None = 
             max_completion_length=max_compl_len,
         )
         loss.backward()
-        torch.nn.utils.clip_grad_norm_(trainable_parameters(policy), max_norm=float(cfg.get("max_grad_norm", 1.0)))
+        gnorm = float(torch.nn.utils.clip_grad_norm_(trainable_parameters(policy), max_norm=float(cfg.get("max_grad_norm", 1.0))))
         optimizer.step()
+
+        with torch.no_grad():
+            ent = logits_entropy(new_logits.detach(), rmask).item()
+            kl_sampled = sampled_kl(old_logp, ref_logp, rmask).item()
+        del new_logits
+
+        # per-completion pieces for the normalization study: each completion's total gradient
+        # weight is |A_k| * T_k / norm, with norm = T_k (canonical) or T_max (dr grpo)
+        lens = token_mask.sum(-1)
+        norm = lens.clamp_min(1.0) if loss_type == "grpo" else torch.full_like(lens, float(max_compl_len))
+        seq_weight = (seq_adv.abs() * lens / norm).tolist()
 
         record = {
             "update": u + 1,
+            "prompt_id": p_row.get("prompt_id", p_row.get("source_index")),
             "reward_mean": round(float(rewards.mean().item()), 4),
             "reward_std": round(rew_std, 4),
             "uninformative": is_uninformative,
-            "policy_loss": round(diags["policy_term"].item(), 4),
-            "kl": round(diags["sampled_kl"].item(), 4),
+            "policy_loss": round(diags["policy_term"].item(), 5),
+            "loss_total": round(loss.item(), 5),
+            "grad_norm": round(gnorm, 5),
+            "kl": round(kl_sampled, 5),
+            "kl_k3_loss_term": round(diags["sampled_kl"].item(), 6),
             "clip_fraction": round(diags["clip_fraction"].item(), 4),
-            "entropy": round(diags["sample_entropy"].item(), 4),
+            "entropy": round(ent, 4),
             "response_length": round(float(rmask.sum(-1).mean().item()), 2),
+            "truncated_fraction": round(float(np.mean(gen["truncated"])), 4),
+            "completion_lengths": [int(x) for x in rmask.sum(-1).tolist()],
+            "completion_rewards": [round(float(x), 4) for x in rewards.tolist()],
+            "completion_advantages": [round(float(x), 4) for x in seq_adv.tolist()],
+            "completion_masked": [bool(x) for x in gen["truncated"]] if mask_trunc else [False] * K,
+            "completion_grad_weight": [round(float(x), 5) for x in seq_weight],
         }
         history.append(record)
-        print(f"[Update {u+1:02d}/{num_updates:02d}] rew={record['reward_mean']:.3f} (std={record['reward_std']:.3f}) kl={record['kl']:.3f} clip={record['clip_fraction']:.3f} len={record['response_length']:.1f}")
+        print(f"[Update {u+1:02d}/{num_updates:02d}] rew={record['reward_mean']:.3f} (std={record['reward_std']:.3f}) kl={record['kl']:.5f} gnorm={record['grad_norm']:.4f} ent={record['entropy']:.3f} clip={record['clip_fraction']:.3f} len={record['response_length']:.1f}")
 
     wall_clock = time.time() - start_time
     peak_vram = (torch.cuda.max_memory_allocated() / (1024**3)) if torch.cuda.is_available() else 0.0
@@ -166,11 +191,22 @@ def run_grpo(config_path: str, output: str | None = None, updates: int | None = 
             "run_name": run_name,
             "loss_type": loss_type,
             "updates": num_updates,
+            "num_generations": K,
+            "clip_epsilon": eps,
+            "kl_beta": beta,
+            "max_completion_length": max_compl_len,
+            "mask_truncated_completions": mask_trunc,
             "wall_clock_sec": round(wall_clock, 2),
             "peak_vram_gb": round(peak_vram, 3),
+            "mean_within_group_reward_std": round(float(np.mean([h["reward_std"] for h in history])), 4),
+            "uninformative_group_fraction": round(float(np.mean([h["uninformative"] for h in history])), 4),
             "trajectory": history,
         }, f, indent=2)
     print(f"Saved results to {res_file}")
+
+    del bundle, policy, rm_model, optimizer
+    clear_gpu()
+    return str(out)
 
 
 def main():

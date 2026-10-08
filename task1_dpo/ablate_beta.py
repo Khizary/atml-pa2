@@ -16,7 +16,8 @@ def main():
     max_examples = int(cfg.get("short_ablation_examples", 300))
 
     print(f"Running DPO beta ablation for betas={betas} with {max_examples} examples each...")
-    summary = {}
+    # short forks: first `short_ablation_examples` training pairs, everything else as in the standard run
+    summary = {"budget_note": f"short forks train on {max_examples} pairs for 1 epoch; standard DPO uses the full set"}
 
     for b in betas:
         run_name = f"beta_{b}".replace(".", "_")
@@ -35,7 +36,7 @@ def main():
             config_path=args.config,
             adapter=out_dir,
             name=run_name,
-            max_eval_examples=min(max_examples, 100),
+            beta=b,
         )
         summary[str(b)] = res
 
