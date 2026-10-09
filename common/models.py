@@ -218,7 +218,10 @@ def value_parameter_groups(model, lora_lr: float, head_lr: float):
 
 
 def token_values(value_model, input_ids, attention_mask):
-    backbone = getattr(value_model, value_model.base_model_prefix)
+    # unwrap peft first, otherwise base_model_prefix resolves to the whole seq-cls model and
+    # its forward runs the score head itself on fp16 hidden states
+    seqcls = value_model.get_base_model() if hasattr(value_model, "get_base_model") else value_model
+    backbone = getattr(seqcls, seqcls.base_model_prefix)
     outputs = backbone(
         input_ids=input_ids,
         attention_mask=attention_mask,
