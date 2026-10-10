@@ -1,0 +1,19 @@
+{
+  "model_name": "standard",
+  "adapter": "outputs/task1_dpo/standard",
+  "beta": 0.1,
+  "num_pairs": 300,
+  "dpo_loss": 0.6729,
+  "preference_accuracy": 0.6367,
+  "mean_dpo_margin": 0.4829,
+  "mean_policy_margin": -13.9159,
+  "mean_ref_margin": -14.3989,
+  "num_generation_prompts": 100,
+  "kl_divergence": 0.00129,
+  "kl_sequence_sum_mean": 0.0332,
+  "reward_model_score_mean": 1.112,
+  "reward_model_score_std": 1.2783,
+  "response_length_mean": 176.29,
+  "response_length_std": 103.99,
+  "response_length_iqr": 200.75
+}

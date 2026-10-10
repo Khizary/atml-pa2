@@ -1,0 +1,96 @@
+{
+  "binning_rule": "prompt mean reward over all 8 cached completions; easy if >= median across prompts, hard otherwise",
+  "median_prompt_reward": 2.1987,
+  "num_prompts": 24,
+  "bin_sizes": {
+    "easy": 12,
+    "hard": 12
+  },
+  "K_2": {
+    "num_groups": 96,
+    "num_completions": 192,
+    "informative_group_rate": 0.9375,
+    "uninformative_group_rate": 0.0625,
+    "mean_within_group_std": 0.3846,
+    "centered_reward_variance": 0.3368,
+    "standardized_advantage_variance": 0.9375,
+    "difficulty_bins": {
+      "easy": {
+        "num_groups": 48,
+        "num_completions": 96,
+        "informative_group_rate": 0.9792,
+        "uninformative_group_rate": 0.0208,
+        "mean_within_group_std": 0.2408,
+        "centered_reward_variance": 0.0996,
+        "standardized_advantage_variance": 0.9792
+      },
+      "hard": {
+        "num_groups": 48,
+        "num_completions": 96,
+        "informative_group_rate": 0.8958,
+        "uninformative_group_rate": 0.1042,
+        "mean_within_group_std": 0.5283,
+        "centered_reward_variance": 0.5741,
+        "standardized_advantage_variance": 0.8958
+      }
+    }
+  },
+  "K_4": {
+    "num_groups": 48,
+    "num_completions": 192,
+    "informative_group_rate": 0.9583,
+    "uninformative_group_rate": 0.0417,
+    "mean_within_group_std": 0.541,
+    "centered_reward_variance": 0.4677,
+    "standardized_advantage_variance": 0.9583,
+    "difficulty_bins": {
+      "easy": {
+        "num_groups": 24,
+        "num_completions": 96,
+        "informative_group_rate": 1.0,
+        "uninformative_group_rate": 0.0,
+        "mean_within_group_std": 0.3705,
+        "centered_reward_variance": 0.1776,
+        "standardized_advantage_variance": 1.0
+      },
+      "hard": {
+        "num_groups": 24,
+        "num_completions": 96,
+        "informative_group_rate": 0.9167,
+        "uninformative_group_rate": 0.0833,
+        "mean_within_group_std": 0.7115,
+        "centered_reward_variance": 0.7578,
+        "standardized_advantage_variance": 0.9167
+      }
+    }
+  },
+  "K_8": {
+    "num_groups": 24,
+    "num_completions": 192,
+    "informative_group_rate": 0.9583,
+    "uninformative_group_rate": 0.0417,
+    "mean_within_group_std": 0.6191,
+    "centered_reward_variance": 0.5599,
+    "standardized_advantage_variance": 0.9583,
+    "difficulty_bins": {
+      "easy": {
+        "num_groups": 12,
+        "num_completions": 96,
+        "informative_group_rate": 1.0,
+        "uninformative_group_rate": 0.0,
+        "mean_within_group_std": 0.4379,
+        "centered_reward_variance": 0.2666,
+        "standardized_advantage_variance": 1.0
+      },
+      "hard": {
+        "num_groups": 12,
+        "num_completions": 96,
+        "informative_group_rate": 0.9167,
+        "uninformative_group_rate": 0.0833,
+        "mean_within_group_std": 0.8002,
+        "centered_reward_variance": 0.8532,
+        "standardized_advantage_variance": 0.9167
+      }
+    }
+  }
+}

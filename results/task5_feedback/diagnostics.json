@@ -1,0 +1,67 @@
+{
+  "num_problems": 20,
+  "verifier": {
+    "reasoning_corruption": {
+      "better_rate": 0.0,
+      "tie_rate": 1.0,
+      "wrong_preference_rate": 0.0
+    },
+    "outcome_error": {
+      "better_rate": 1.0,
+      "tie_rate": 0.0,
+      "wrong_preference_rate": 0.0
+    },
+    "persuasive_filler": {
+      "better_rate": 0.0,
+      "tie_rate": 1.0,
+      "wrong_preference_rate": 0.0
+    },
+    "gold_distractor": {
+      "better_rate": 1.0,
+      "tie_rate": 0.0,
+      "wrong_preference_rate": 0.0
+    },
+    "S_reason": 0.0,
+    "S_outcome": 1.0
+  },
+  "ai_judge": {
+    "reasoning_corruption": {
+      "better_rate": 0.0,
+      "tie_rate": 1.0,
+      "wrong_preference_rate": 0.0
+    },
+    "outcome_error": {
+      "better_rate": 0.0,
+      "tie_rate": 1.0,
+      "wrong_preference_rate": 0.0
+    },
+    "persuasive_filler": {
+      "better_rate": 0.0,
+      "tie_rate": 0.75,
+      "wrong_preference_rate": 0.25
+    },
+    "gold_distractor": {
+      "better_rate": 0.25,
+      "tie_rate": 0.7,
+      "wrong_preference_rate": 0.05
+    },
+    "S_reason": 0.0,
+    "S_outcome": 0.0
+  },
+  "mean_reward_per_variant": {
+    "verifier": {
+      "clean_correct": 1.0,
+      "corrupt_reasoning_correct_final": 1.0,
+      "gold_distractor_wrong_final": 0.0,
+      "good_reasoning_wrong_final": 0.0,
+      "persuasive_filler_correct": 1.0
+    },
+    "ai_judge_group_winrate": {
+      "clean_correct": 0.4938,
+      "corrupt_reasoning_correct_final": 0.5,
+      "gold_distractor_wrong_final": 0.425,
+      "good_reasoning_wrong_final": 0.4813,
+      "persuasive_filler_correct": 0.6
+    }
+  }
+}

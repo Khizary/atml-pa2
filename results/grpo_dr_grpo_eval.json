@@ -1,0 +1,14 @@
+{
+  "policy_name": "dr_grpo",
+  "adapter": "outputs/task3_grpo/dr_grpo",
+  "eval_examples": 100,
+  "max_new_tokens": 512,
+  "mean_reward": 1.5276,
+  "std_reward": 1.262,
+  "kl_divergence": -3e-05,
+  "entropy": 0.9388,
+  "response_length_mean": 264.18,
+  "response_length_std": 196.59,
+  "response_length_iqr": 420.0,
+  "truncation_rate": 0.24
+}

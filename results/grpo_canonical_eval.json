@@ -1,0 +1,14 @@
+{
+  "policy_name": "canonical",
+  "adapter": "outputs/task3_grpo/canonical",
+  "eval_examples": 100,
+  "max_new_tokens": 512,
+  "mean_reward": 1.5108,
+  "std_reward": 1.2914,
+  "kl_divergence": 9e-05,
+  "entropy": 0.9132,
+  "response_length_mean": 249.94,
+  "response_length_std": 197.85,
+  "response_length_iqr": 419.75,
+  "truncation_rate": 0.22
+}

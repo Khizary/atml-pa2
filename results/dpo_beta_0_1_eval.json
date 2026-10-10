@@ -1,0 +1,19 @@
+{
+  "model_name": "beta_0_1",
+  "adapter": "outputs/task1_dpo/beta_0_1",
+  "beta": 0.1,
+  "num_pairs": 300,
+  "dpo_loss": 0.6871,
+  "preference_accuracy": 0.6267,
+  "mean_dpo_margin": 0.1265,
+  "mean_policy_margin": -14.2724,
+  "mean_ref_margin": -14.3989,
+  "num_generation_prompts": 100,
+  "kl_divergence": -8e-05,
+  "kl_sequence_sum_mean": -0.0725,
+  "reward_model_score_mean": 1.2708,
+  "reward_model_score_std": 1.167,
+  "response_length_mean": 164.99,
+  "response_length_std": 104.9,
+  "response_length_iqr": 209.5
+}

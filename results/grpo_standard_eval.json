@@ -1,0 +1,14 @@
+{
+  "policy_name": "standard",
+  "adapter": "outputs/task3_grpo/standard",
+  "eval_examples": 100,
+  "max_new_tokens": 512,
+  "mean_reward": 1.3761,
+  "std_reward": 1.3964,
+  "kl_divergence": 0.00011,
+  "entropy": 0.901,
+  "response_length_mean": 256.05,
+  "response_length_std": 195.95,
+  "response_length_iqr": 440.75,
+  "truncation_rate": 0.25
+}

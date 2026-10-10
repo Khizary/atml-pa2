@@ -1,0 +1,84 @@
+{
+  "dataset": "gsm",
+  "num_problems": 300,
+  "max_new_tokens": 512,
+  "decoding": "greedy",
+  "policies": {
+    "sft": {
+      "exact_accuracy": 0.2733,
+      "format_compliance_rate": 0.3533,
+      "response_tokens_mean": 275.1,
+      "response_tokens_std": 86.38,
+      "truncation_rate": 0.02,
+      "failure_types": {
+        "no_final_format": 188,
+        "correct": 82,
+        "wrong_final": 24,
+        "truncated_no_final": 6
+      }
+    },
+    "rlvr": {
+      "exact_accuracy": 0.2933,
+      "format_compliance_rate": 0.3633,
+      "response_tokens_mean": 275.75,
+      "response_tokens_std": 87.86,
+      "truncation_rate": 0.0233,
+      "failure_types": {
+        "no_final_format": 184,
+        "correct": 88,
+        "wrong_final": 21,
+        "truncated_no_final": 7
+      }
+    },
+    "rlaif": {
+      "exact_accuracy": 0.29,
+      "format_compliance_rate": 0.3633,
+      "response_tokens_mean": 276.64,
+      "response_tokens_std": 87.09,
+      "truncation_rate": 0.0233,
+      "failure_types": {
+        "no_final_format": 184,
+        "correct": 87,
+        "wrong_final": 22,
+        "truncated_no_final": 7
+      }
+    }
+  },
+  "pairwise": {
+    "rlvr_vs_sft": {
+      "win_rate": 0.5033,
+      "wins": 6,
+      "ties": 290,
+      "losses": 4,
+      "tie_rate": 0.9667,
+      "verifier_judge_agreement": 0.93,
+      "verifier_decisive_pairs": 12,
+      "judge_agrees_on_verifier_decisive_pairs": 0.0,
+      "verifier_vs_judge_counts": {
+        "verifier_TIE|judge_TIE": 279,
+        "verifier_TIE|judge_A": 6,
+        "verifier_A|judge_TIE": 8,
+        "verifier_A|judge_B": 1,
+        "verifier_B|judge_TIE": 3,
+        "verifier_TIE|judge_B": 3
+      }
+    },
+    "rlaif_vs_sft": {
+      "win_rate": 0.5,
+      "wins": 4,
+      "ties": 292,
+      "losses": 4,
+      "tie_rate": 0.9733,
+      "verifier_judge_agreement": 0.96,
+      "verifier_decisive_pairs": 5,
+      "judge_agrees_on_verifier_decisive_pairs": 0.0,
+      "verifier_vs_judge_counts": {
+        "verifier_TIE|judge_TIE": 288,
+        "verifier_TIE|judge_A": 4,
+        "verifier_A|judge_TIE": 4,
+        "verifier_TIE|judge_B": 3,
+        "verifier_A|judge_B": 1
+      }
+    }
+  }
+}

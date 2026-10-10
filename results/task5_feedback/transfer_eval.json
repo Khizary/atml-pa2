@@ -1,0 +1,81 @@
+{
+  "dataset": "transfer",
+  "num_problems": 100,
+  "max_new_tokens": 512,
+  "decoding": "greedy",
+  "policies": {
+    "sft": {
+      "exact_accuracy": 0.42,
+      "format_compliance_rate": 0.55,
+      "response_tokens_mean": 163.35,
+      "response_tokens_std": 70.86,
+      "truncation_rate": 0.0,
+      "failure_types": {
+        "no_final_format": 45,
+        "correct": 42,
+        "wrong_final": 13
+      }
+    },
+    "rlvr": {
+      "exact_accuracy": 0.46,
+      "format_compliance_rate": 0.58,
+      "response_tokens_mean": 164.41,
+      "response_tokens_std": 72.15,
+      "truncation_rate": 0.0,
+      "failure_types": {
+        "no_final_format": 42,
+        "correct": 46,
+        "wrong_final": 12
+      }
+    },
+    "rlaif": {
+      "exact_accuracy": 0.48,
+      "format_compliance_rate": 0.62,
+      "response_tokens_mean": 164.32,
+      "response_tokens_std": 73.0,
+      "truncation_rate": 0.0,
+      "failure_types": {
+        "no_final_format": 38,
+        "correct": 48,
+        "wrong_final": 14
+      }
+    }
+  },
+  "pairwise": {
+    "rlvr_vs_sft": {
+      "win_rate": 0.53,
+      "wins": 14,
+      "ties": 78,
+      "losses": 8,
+      "tie_rate": 0.78,
+      "verifier_judge_agreement": 0.78,
+      "verifier_decisive_pairs": 6,
+      "judge_agrees_on_verifier_decisive_pairs": 0.5,
+      "verifier_vs_judge_counts": {
+        "verifier_TIE|judge_A": 12,
+        "verifier_TIE|judge_TIE": 75,
+        "verifier_A|judge_TIE": 3,
+        "verifier_TIE|judge_B": 7,
+        "verifier_A|judge_A": 2,
+        "verifier_B|judge_B": 1
+      }
+    },
+    "rlaif_vs_sft": {
+      "win_rate": 0.535,
+      "wins": 14,
+      "ties": 79,
+      "losses": 7,
+      "tie_rate": 0.79,
+      "verifier_judge_agreement": 0.77,
+      "verifier_decisive_pairs": 6,
+      "judge_agrees_on_verifier_decisive_pairs": 0.3333,
+      "verifier_vs_judge_counts": {
+        "verifier_TIE|judge_A": 12,
+        "verifier_TIE|judge_TIE": 75,
+        "verifier_A|judge_TIE": 4,
+        "verifier_TIE|judge_B": 7,
+        "verifier_A|judge_A": 2
+      }
+    }
+  }
+}

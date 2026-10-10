@@ -1,0 +1,14 @@
+{
+  "policy_name": "standard",
+  "adapter": "outputs/task2_ppo/standard",
+  "eval_examples": 100,
+  "max_new_tokens": 768,
+  "mean_reward": 1.7688,
+  "std_reward": 1.1228,
+  "kl_divergence": -2e-05,
+  "entropy": 0.9448,
+  "response_length_mean": 302.65,
+  "response_length_std": 255.59,
+  "response_length_iqr": 424.25,
+  "truncation_rate": 0.06
+}
