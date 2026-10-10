@@ -1,141 +1,84 @@
 # ATML PA2 - LLM Post-Training
 
-<!-- FINAL_STUDENT_SETUP -->
+Implementation and results for ATML PA2: DPO, PPO, GRPO / Dr. GRPO, XSTest safety calibration, and RLVR vs RLAIF, all on Qwen2.5-1.5B-Instruct with LoRA adapters. It's built on the course starter repository; the training loops, ablations, evaluation and analysis code are ours.
 
-## Quick start
+## Setup
 
 ```bash
-git clone https://github.com/AbDu11aHHH/ATML-PA2-LLM-PostTraining.git
-cd ATML-PA2-LLM-PostTraining
+git clone https://github.com/Khizary/atml-pa2.git
+cd atml-pa2
 python -m pip install -r requirements.txt
 python -m scripts.download_assets
 python -m scripts.validate_assets
-```
-
-The fixed datasets, cached diagnostics, and supplied
-continuation checkpoints are downloaded from:
-
-https://huggingface.co/datasets/AbDu11aHHH/ATML-PA2-assets
-
-Pinned release revision:
-
-`0b350481fb03f5525a35bcdec4131bd4fe487f98`
-
----
-# ATML PA2 - LLM Post-Training
-
-This is the **student starter repository** for ATML PA2. The released code is intentionally incomplete: Tasks 1-3 provide model/data loading, objective helpers, checkpoint restoration, and experiment entry points, but **you must implement the training loops and ablation orchestration yourself**. Each of Tasks 1-3 also contains one deliberate algorithmic defect in its core objective code; identifying and correcting these defects is part of validating your implementation.
-
-Task 4 supplies the fixed AI safety judge and response-generation utilities, but you must write the evaluation/aggregation code. Task 5 supplies the exact RLVR verifier, the fixed pairwise AI judge used for RLAIF evaluation, and data/model loaders; you must implement the requested evaluation and analysis.
-
-## 1. Clone and install
-
-```bash
-git clone https://github.com/COURSE_ORG/ATML-PA2-LLM-PostTraining.git
-cd ATML-PA2-LLM-PostTraining
-python -m pip install -r requirements.txt
-```
-
-## 2. Download the course assets
-
-The large course-created checkpoints and fixed data are distributed as a GitHub Release asset rather than normal Git files. After cloning, run:
-
-```bash
-python -m scripts.download_assets
-python -m scripts.validate_assets
-```
-
-If your instructor provides a direct asset URL separately, use:
-
-```bash
-python -m scripts.download_assets --url '<ASSET_URL>'
-```
-
-Public base/reward/judge models are downloaded from Hugging Face at runtime and are **not** included in the course asset archive.
-
-The installer also materializes the fixed 100-example Task 5 transfer set from the official SVAMP challenge-set source if it is not already present. The tiny Task 1 word-limit prompt set is tracked directly in this repository.
-
-## 3. Environment check
-
-```bash
 python -m scripts.check_environment
 ```
 
-Run commands from the repository root. The reference environment used to prepare the release pins Transformers 4.57.1, TRL 0.27.2, PEFT 0.17.1, and Tokenizers 0.22.1.
+`download_assets` fetches the fixed course data, cached rollouts and midpoint checkpoints from
+https://huggingface.co/datasets/AbDu11aHHH/ATML-PA2-assets at the pinned revision
+`0b350481fb03f5525a35bcdec4131bd4fe487f98`. Base, reward and judge models are pulled from Hugging Face at runtime.
 
-## 4. Supplied course checkpoints
+Reference environment: Transformers 4.57.1, TRL 0.27.2, PEFT 0.17.1, Tokenizers 0.22.1. Our results were produced on a single Kaggle T4 (16 GB, fp16). The full pipeline takes about 8 hours there.
 
-After `download_assets`, these directories should exist:
+## Reproducing the results
 
-```text
-checkpoints/ppo_midpoint_policy/
-checkpoints/ppo_midpoint_value/
-checkpoints/grpo_midpoint_policy/
-checkpoints/rlvr_policy/
-checkpoints/rlaif_policy/
-```
-
-PPO and GRPO begin from the supplied continuation checkpoints. RLVR and RLAIF are supplied frozen evaluation policies; students do not retrain them.
-
-The PPO value checkpoint is intentionally released as the exact staff midpoint state, including its imperfect held-out value calibration. Treat critic behavior as an analysis variable rather than assuming a perfect baseline, and start every PPO fork from the identical supplied policy/value state. The default continuation generation cap is 512 tokens for feasibility; frozen evaluation uses the larger cap specified in `configs/ppo.yaml`.
-
-## 5. Task entry points
-
-### Task 1 - DPO
+Run from the repo root, in this order. Every config fixes the seed (6304), and each fork starts from the same supplied midpoint checkpoint.
 
 ```bash
+# Task 1 - DPO
 python -m task1_dpo.train --config configs/dpo.yaml --run-name standard
 python -m task1_dpo.evaluate --config configs/dpo.yaml --adapter outputs/task1_dpo/standard --name standard
 python -m task1_dpo.ablate_beta --config configs/dpo.yaml
 python -m task1_dpo.analyze_length --config configs/dpo.yaml
-```
 
-### Task 2 - PPO
-
-```bash
+# Task 2 - PPO
 python -m task2_ppo.continue_train --config configs/ppo.yaml --run-name standard
 python -m task2_ppo.evaluate --config configs/ppo.yaml --adapter outputs/task2_ppo/standard --name standard
 python -m task2_ppo.analyze_clipping --config configs/ppo.yaml
 python -m task2_ppo.ablate_kl --config configs/ppo.yaml
-```
 
-### Task 3 - GRPO
-
-```bash
+# Task 3 - GRPO
 python -m task3_grpo.continue_train --config configs/grpo.yaml --run-name standard
 python -m task3_grpo.evaluate --config configs/grpo.yaml --adapter outputs/task3_grpo/standard --name standard
 python -m task3_grpo.analyze_group_size --config configs/grpo.yaml
 python -m task3_grpo.compare_normalization --config configs/grpo.yaml
-```
 
-### Task 4 - Safety calibration
-
-The judge loader/parser are supplied. You must implement the requested generation aggregation and evaluation.
-
-```bash
+# Task 4 - Safety calibration (needs the Task 1-3 adapters)
 python -m task4_safety.generate_responses --config configs/feedback.yaml
 python -m task4_safety.judge_responses --config configs/feedback.yaml
 python -m task4_safety.make_audit_sheet --config configs/feedback.yaml
+# fill the manual_label column of results/task4_safety/manual_audit_sheet.csv, then:
 python -m task4_safety.evaluate_safety --config configs/feedback.yaml
-```
 
-### Task 5 - RLVR vs RLAIF
-
-The exact verifier and pairwise AI judge are supplied; you implement the evaluation/analysis.
-
-```bash
+# Task 5 - RLVR vs RLAIF
 python -m task5_feedback.evaluate_math --config configs/feedback.yaml --dataset gsm
 python -m task5_feedback.score_perturbations --config configs/feedback.yaml
 python -m task5_feedback.evaluate_math --config configs/feedback.yaml --dataset transfer
 python -m task5_feedback.compare_feedback --config configs/feedback.yaml
 ```
 
-## 6. Reproducibility rules
+Trained adapters go to `outputs/` (not committed). Everything reported is in `results/`:
 
-- Do not alter course-provided data, cached rollouts, or supplied checkpoints.
-- Start every short fork from the **same supplied midpoint checkpoint**.
-- Keep prompt IDs, generated-token/update budgets, seed, and evaluation procedure matched across ablations.
-- Commit your code, configs, small JSON/CSV logs, and figures. Do not commit downloaded checkpoints, raw course assets, or model caches.
-- Record peak VRAM and wall-clock time for the standard PPO and GRPO continuations.
+| Path | Contents |
+|---|---|
+| `results/dpo_*.json` | DPO training logs, eval (pair accuracy, margins, sampled KL, RM score, length), beta ablation, length-stratified analysis |
+| `results/ppo_*.json` | PPO continuation trajectories, held-out eval, clipping study (cached-batch + forks), KL ablation |
+| `results/grpo_*.json` | GRPO continuation trajectories, eval, group-size study, canonical vs Dr. GRPO comparison |
+| `results/samples/` | generated eval samples per policy/fork, for qualitative examples |
+| `results/task4_safety/` | XSTest generations, judge labels, manual audit sheet (with our labels), `safety_calibration.json` |
+| `results/task5_feedback/` | GSM8K and SVAMP-transfer responses, pairwise judge results, perturbation diagnostics, comparison summary |
 
-See the assignment manual for the required experiments, metrics, and report questions.
+## Implementation notes
+
+- **Starter defects fixed:** DPO margin sign (`task1_dpo`), PPO clipped surrogate now takes `min` rather than `max` (`task2_ppo/ppo.py`), and GRPO rewards are standardized per group rather than over the batch (`task3_grpo`).
+- **Reference policy:** the base model, obtained by disabling the LoRA adapter (`common.models.reference_mode`).
+- **KL:** response-token `log pi - log pi_ref` on the policy's own samples, averaged over tokens.
+- **PPO critic:** the trainable critic parameters (LoRA + score head) are kept in fp32, because Adam on fp16 weights produced NaNs on the T4. Value estimates come from the decoder hidden states passed through the head (`common.models.token_values`).
+- **Dropout:** disabled during RL updates, so old and new log-probs come from the same deterministic forward pass.
+- **Task 4:** the supplied judge prompt, loader and parser are used unchanged. Rates follow the judge spec, i.e. P(label | prompt class).
+
+## Attribution
+
+- Starter code, data, cached rollouts, checkpoints, the XSTest safety judge, and the Task 5 verifier and pairwise judge come from the course release (ATML PA2 starter repository and the Hugging Face asset repo above).
+- Models: Qwen2.5-1.5B-Instruct (policy), `yavuz-ai/qwen2.5-1.5b-rm-ultrafeedback` (reward model), and Qwen2.5-3B-Instruct (judge), all from Hugging Face.
+- Datasets: XSTest (Röttger et al., 2024), GSM8K, and the SVAMP challenge set, as packaged by the course.
+- LLM coding assistants were used while writing and debugging the code, as the course policy allows for code. All experimental design choices, result interpretation and the report are our own.
