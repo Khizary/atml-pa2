@@ -54,6 +54,10 @@ python -m task5_feedback.evaluate_math --config configs/feedback.yaml --dataset 
 python -m task5_feedback.score_perturbations --config configs/feedback.yaml
 python -m task5_feedback.evaluate_math --config configs/feedback.yaml --dataset transfer
 python -m task5_feedback.compare_feedback --config configs/feedback.yaml
+
+# Extra checks used in the report (standard errors, audit agreement on merged labels,
+# math format checks, size of the supplied adapters); reads results/ and checkpoints/ only
+python -m scripts.report_diagnostics --config configs/feedback.yaml
 ```
 
 Trained adapters go to `outputs/` (not committed). Everything reported is in `results/`:
@@ -66,6 +70,7 @@ Trained adapters go to `outputs/` (not committed). Everything reported is in `re
 | `results/samples/` | generated eval samples per policy/fork, for qualitative examples |
 | `results/task4_safety/` | XSTest generations, judge labels, manual audit sheet (with our labels), `safety_calibration.json` |
 | `results/task5_feedback/` | GSM8K and SVAMP-transfer responses, pairwise judge results, perturbation diagnostics, comparison summary |
+| `results/report_diagnostics.json` | paired reward differences and standard errors, length/reward correlations, audit agreement on merged labels, math format checks, supplied-adapter sizes |
 
 ## Implementation notes
 
